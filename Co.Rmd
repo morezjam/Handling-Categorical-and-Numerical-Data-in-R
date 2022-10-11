@@ -1,0 +1,187 @@
+---
+title: "Co"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=12, fig.height=10) 
+```
+
+```{r}
+#installing the packages in the lines below
+install.packages("caret")
+library(caret)
+```
+
+```{r}
+install.packages("car")
+library(car)
+```
+```{r}
+install.packages("dplyr")
+library(dplyr)
+```
+
+```{r}
+install.packages("mice")
+library(mice)
+```
+
+```{r}
+install.packages("caTools")
+library(caTools)
+```
+
+```{r}
+install.packages("Metrics")
+library(Metrics)
+```
+
+```{r}
+install.packages("pastecs")
+library(pastecs)
+```
+
+```{r}
+install.packages("ggplot2")
+library(ggplot2)
+```
+
+```{r}
+install.packages(c(olsrr,leaps))
+library(olsrr)
+library(leaps)
+```
+
+```{r}
+install.packages("corrplot")
+library(corrplot)
+```
+
+```{r}
+data = read.csv("Life_Expectancy_Data1.csv") #loading the data and assigning the data
+head(data) #some records from the data
+
+```
+
+```{r}
+print(str(data)) #print structure of the data
+
+```
+
+```{r}
+#encoding country names into numbers
+data[,1] = as.numeric(as.factor(data[,1]))
+```
+
+
+```{r} 
+for (cname in names(data)) {
+  print(paste("number of null values for",cname,"=", sum(is.na(data[cname]))), sep=" ")
+}
+
+# this code gives us the number of null values per column
+```
+
+```{r}
+#imputation
+imputed_data = data[,!(names(data) %in% "EG.FEC.RNEW.ZS")] # dropping the null column
+imputed_data = mice(imputed_data, m = 10, method='cart', seed=500) # using mice with cart method
+imputed_data = complete(imputed_data) #completing the imputed data
+for (cname in names(imputed_data)) { #checking the number of null values after imputation
+  print(paste("number of null values for",cname,"=", sum(is.na(imputed_data[cname]))), sep=" ")
+}
+```
+
+
+```{r}
+# selecting numerical columns of imputed data
+numeric_cols = unlist(lapply(imputed_data, is.numeric))
+data_num = imputed_data[, numeric_cols]
+head(data_num)
+```
+
+```{r}
+# scatter plot of Life expectancy and CBRT IN
+ggplot(data_num) +
+  aes(x = SP.DYN.LE00.IN, y = SP.DYN.CBRT.IN) +
+  geom_point()
+```
+
+```{r}
+boxplot(data_num$SP.DYN.LE00.IN) # boxplot representation of life expectancy
+```
+
+```{r}
+#density plot for life expectancy
+
+ggplot(data_num) +
+  aes(x = data_num$SP.DYN.LE00.IN) +
+  geom_density() 
+
+```
+
+```{r}
+summary(imputed_data) #some numeric statistical measures of the imputed data (Min, 1st Q, Median, 3rd Q, Mean, Max) for each numeric column
+```
+
+```{r}
+round(stat.desc(imputed_data, norm = TRUE),5) # more numeric analysis of the imputed data using pastecs library rounded by 5 digits 
+
+# this is the end of Q1&Q2
+```
+
+
+```{r}
+# building a full model to see the result of p-value for each column
+
+linear_mod = lm(SP.DYN.LE00.IN ~ ., data_num)
+summary(linear_mod)
+
+```
+
+```{r}
+
+# drawing the correlation heat-map graph of the selected attributes (e.g columns)
+
+columns = c("SP.DYN.LE00.IN", "SP.DYN.IMRT.IN", "SP.POP.GROW", "SP.DYN.CBRT.IN", "SE.PRM.CUAT.ZS", 
+            "SH.XPD.CHEX.PC.CD", "EG.ELC.ACCS.ZS", "EN.POP.DNST", "SH.HIV.INCD")
+corrplot(cor(data_num[columns]), "number", "upper")
+
+# this is the end of Q3
+
+```
+```{r}
+vif(linear_mod) #vif of the model (the larger vif the more colinear the column is)
+```
+
+```{r}
+# we chose the attributes with the smallest p-value based on the summary of the full model and build a model based on the selected attributes to see how it works
+
+# splitting the data into train and test set using k-fold with k=5 method to avoid bias
+kcv = trainControl(method = "cv", number = 5)
+modified_model = train(SP.DYN.LE00.IN ~ SP.DYN.IMRT.IN + EG.ELC.ACCS.ZS  + SH.XPD.CHEX.PC.CD, data = data_num, method = "lm", trControl = kcv)
+print(modified_model)
+print(summary(modified_model$finalModel))
+
+#this is the end of Q4
+```
+
+```{r}
+#code of Q5
+data_life = read.csv("Life_Expectancy_Data1.csv", stringsAsFactors = TRUE)
+library(dplyr)
+group_by(data_life, Continent) %>%
+  summarise(
+    count = n(),
+    mean = mean(SP.DYN.LE00.IN, na.rm = TRUE),
+    sd = sd(SP.DYN.LE00.IN, na.rm = TRUE)
+  )
+
+res.aov = aov(SP.DYN.LE00.IN ~ Continent, data = data_life)
+# Summary of the analysis
+summary(res.aov)
+#this is the end of Q5
+```
+
